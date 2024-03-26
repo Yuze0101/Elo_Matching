@@ -47,6 +47,7 @@ public class Player
     public int UID { get; set; } // Player ID
     public string UserName {get; set;} // Player Name
     public bool ActionAntiCheat {get; set;} // Player Whether Runing AntiCheat  
+    public bool User
     public PlayerInfo PInfo{get; set;} // Player Info
     public PlayerHistorMatchData PHMD {get; set;} // Player Histor Match Data
     public PlayerDevice PDevice {get; set;} // Player Device Info
@@ -151,20 +152,80 @@ public class MatchmakingSystem
 }
 ```
 
-## 功能实现设想
+## 匹配系统核心流程
 
-##### 玩家排队匹配
+#### 基础阶段流程：
 
-> 玩家队伍可以选择在特定地图或模式下排队匹配，系统会自动根据队伍情况决定是否平衡人数，参加匹配。
+1. ##### 用户每发起一次准备请求，检测：
 
-实现设想：匹配系统实现队伍与队伍之间的匹配。
+   1. 用户是否被禁赛
+   2. 用户是否开启反作弊系统
+   3. ....
+   4. 用户是否在准备队列
 
-玩家在UI中的操作流程应为：准备->开始匹配
+2. ##### 用户队伍发起匹配请求：
 
-映射UI到数据处理为：
+   1. 成员确认： 核对队伍 Team.TeamMembers 的 成员是否均在准备队列中，若有成员不在，则返回 **<u>成员未准备事件</u>** 。
+   2. 模式分类处理：Team.TeamMode 将判定队伍添加进入对应的匹配池中。
 
-1. 准备 -> 在匹配系统中添加到玩家队列中；
-2. 开始匹配 ->
-   1.  将当前队伍信息进行匹配前校验，如人数校验，检测玩家队列中是否有对应的成员存在。
-   2.  校验通过添加队伍至匹配队列中
-   3.  更新队伍的**Team_MatchInfo**信息
+3. ##### 匹配池处理：
+
+   1. 平衡人数：
+
+      若 Team.TeamMembers.leng 长度小于 匹配模式所规定的队伍人数 ，则将队伍加进挂起等待队列。等待符合添加的新队伍合   并为新 Team 对象。人数平衡加入匹配池中，寻找对手。
+
+       新 Team 对象合并要求：两支队伍
+
+      1. 人数平衡： Team.TeamMembers.leng 相加必须 ( 等于 或 *小于[ 争论项，此条件会使搜索时间复杂度↓，但会增加Player属性：已确保队伍能出现恢复重组]*) 匹配模式所规定的队伍人数。
+      2. 实力平衡：确保 Team.TeamAveragePing 和 Team.TeamRank 在可接纳范围内。
+
+   2. 寻找对手队伍：
+
+        本质上也是平衡人数，这里考虑继承平衡人数方法，并将平衡人数条件修改为等于模式所需要的总人数。
+
+      ```bash
+      两只队伍.TeamMembers.length == 模式所需要的总人数
+      ```
+
+   3. 部分模式要求：两只队伍倒计时投票决定Match中的某些属性值
+
+         例子情景：两支队伍，共10人。有地图列表共11张，要求15s时间内，Team1 下 5名成员以投票的方式，投出5张地图。同样，Team2 将投出剩下5张。至此，地图池仅剩一张，作为 Match.Map 的值。
+
+        注意：若 Team1 进行 15s 倒计时投票，Team2 将等待 Team1 投票结果。
+
+        实现参考：
+
+        1. 创建方法VoteForMap，接收2支队伍组成的Team对象数组 | 地图列表，返回最后的结果
+      
+
+         ```c#
+         // 接收2支队伍的Team对象，返回最后的结果
+         public string VoteForMap(Team[] teams, List<string> mapPool)
+         {
+                   
+         }
+         ```
+
+      2. 创建循环，依次向 Team A，Team B 推送 Ban 图流程，使其进入 Ban 图状态。
+
+         ```c#
+         public string VoteForMap(Team[] teams, List<string> mapPool)
+         {
+             for(int i = 0; i < teams.Length; i++)
+             {
+                 // 15s 倒计时模拟，每秒向 teams 子对象发送 更新的地图列表
+                for(int j = 0; j < 15; j++)
+                {
+                     await UpdataBanMapList(teams[i], mapPool); 
+                     await Task.Delay(1000); // 等待1秒
+                }
+             }      
+         }
+         
+         public string[] UpdataBanMapList(Team BanMapTeam)
+         {
+             
+         }
+         
+         
+         ```
